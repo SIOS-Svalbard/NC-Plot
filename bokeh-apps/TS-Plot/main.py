@@ -441,7 +441,7 @@ if data.feature_type == 'TimeSeries':
     x, y = df.index.name, variables[0]
     y_range_flipped = False
     handler = ts_handler
-else:
+if data.feature_type == 'Profile':
     df = data
     variables = list(data.columns)
     var_label, var_tooltip_label, x_axis_label = get_labels(df, variables[0])
