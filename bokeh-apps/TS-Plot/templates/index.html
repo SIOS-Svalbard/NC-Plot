@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    {{ bokeh_css }}
+    {{ bokeh_js }}
+    <link rel="stylesheet" href="TS-Plot/static/css/styles.css"/>
+  </head>
+  <body style="background-color:lightgrey;">
+  {{ plot_div|indent(8) }}
+  {{ plot_script|indent(8) }}
+  </body>
+</html>
