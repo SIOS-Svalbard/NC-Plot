@@ -1,0 +1,34 @@
+version: '3.5'
+services:
+  bokeh:
+    build:
+      context: ./Docker/bokeh/
+      dockerfile: Dockerfile
+    container_name: bokeh
+    image: epinux/sci-bokeh
+    environment:
+      BOKEH_ALLOW_WS_ORIGIN: '0.0.0.0:5100'
+      PREFIX: 'test'
+      ORIGIN: '0.0.0.0:5100' 
+      PORT: '5100'
+      LOG_LEVEL: 'info'
+      TSPLOT_DOWNLOAD: '/TS-Plot/static/Download'
+    ports:
+      - "5100:5100"
+    restart: always
+    volumes:
+      - ./bokeh-apps/TS-Plot:/TS-Plot
+      - ./bokeh-apps/entrypoint.sh:/entrypoint.sh
+
+  hyrax:
+    build:
+      context: ./Docker/hyrax/
+      dockerfile: Dockerfile
+    container_name: hyrax
+    image: epinux/metsis-hyrax
+    ports:
+      - "9090:8080"
+    volumes:
+      - ./Docker/volumes/data:/usr/share/hyrax
+    restart: always
+    

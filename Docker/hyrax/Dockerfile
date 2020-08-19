@@ -1,0 +1,3 @@
+FROM opendap/hyrax:latest
+
+RUN yum upgrade -y
