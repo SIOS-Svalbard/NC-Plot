@@ -13,14 +13,14 @@ import bokeh
 from bokeh.io import show
 from bokeh.layouts import layout, column, row, Spacer
 from bokeh.models import ColumnDataSource
-from bokeh.models import Select, Button, Div, Slider
-from bokeh.models.tools import HoverTool, CrosshairTool
+from bokeh.models import Select, Button, Div, Slider, CustomJS
+from bokeh.models.tools import HoverTool, CrosshairTool, CustomAction
 from bokeh.plotting import figure, curdoc
-from bokeh.models.widgets import CheckboxGroup
+from bokeh.models.widgets import CheckboxGroup, DataTable, TableColumn, Panel, Tabs
 from bokeh.themes import Theme, built_in_themes
 #
 from itsdangerous import TimestampSigner
-# rom itsdangerous import BadSignature, SignatureExpired
+# from itsdangerous import BadSignature, SignatureExpired
 
 import sys
 sys.path.append("fontawesome")
@@ -51,8 +51,8 @@ def get_data(resource_url):
     variable_metadata = data.variable_metadata
     data = data[variables]
     if axis == 'y_axis':
-        data.dataset_metada = ''
-        data.dataset_metada = dataset_metadata
+        data.dataset_metadata = ''
+        data.dataset_metadata = dataset_metadata
         data.variable_metadata = ''
         data.variable_metadata = variable_metadata
         data.feature_type = ''
@@ -78,20 +78,37 @@ def get_data(resource_url):
             data.feature_type = 'Profile'
             return data
         
-def show_hide_theme(event):
-    if theme_select.visible:
-        theme_select.visible = False
-        fontsize_adjustments.visible = False
+def show_hide_accessibility(event):
+    if accessibility_layout.visible:
+        accessibility_layout.visible = False
     else:
-        theme_select.visible = True
-        fontsize_adjustments.visible = True
+        fake_div.visible = True
+        accessibility_layout.visible = True
+        fake_div.visible = False
+        export_layout.visible = False
+        metadata_layout.visible = False
 
 def show_hide_export(event):
     if export_layout.visible:
         export_layout.visible = False
     else:
+        fake_div.visible = True
         export_layout.visible = True
+        fake_div.visible = False
+        metadata_layout.visible = False
+        accessibility_layout.visible = False
 
+
+def show_hide_metadata(event):
+    if metadata_layout.visible:
+        metadata_layout.visible = False
+    else:
+        fake_div.visible = True
+        metadata_layout.visible = True
+        fake_div.visible = False
+        export_layout.visible = False
+        accessibility_layout.visible = False
+        
 def data_download(event):
     download_url.text=''
     output_format = 'csv'
@@ -134,14 +151,15 @@ def data_download(event):
     except KeyError:
         server_domain = 'localhost:5100'
         prefix = 'test'
-    url_text=f'<a href="http://{server_domain}/{prefix}/TS-Plot/static/Download/{download_token}">Direct download for the selected variables, from: {df.index[start]} to: {df.index[end-1]}</a>'
+    url_text = ''
+    url_text=f'<a href="http://{server_domain}/{prefix}/TS-Plot/static/Download/{download_token}">Direct download <br> <br> </a> <font size = "2" color = "darkslategray" >selected index: [{df.index[start]}, {df.index[end-1]}]</font>'
     if data.feature_type == 'TimeSeriesProfile':
         date_time = get_datetime_string(list(data.keys())[int(slider.value)])
-        url_text += f' selected profile: # {slider.value} {date_time}'  
+        url_text += f' <br> <font size = "2" color = "darkslategray" >selected profile: # {slider.value} {date_time}</font> '  
     download_url.text=url_text
 
 def resampler(attr, old, new):
-    if new == 0:
+    if new == 0 or new == '--':
         data = df
     else:
         data = df.resample(new).mean().interpolate(method='linear').copy()
@@ -370,6 +388,39 @@ def get_labels(obj, variable):
 nc_url = str(args.get('url')[0].decode())
 data = get_data(nc_url)
 
+
+# Create  metadata table
+dataset_metadata_keys = list(data.dataset_metadata.keys())
+dataset_metadata_values = list(data.dataset_metadata.values())
+dataset_metadata = dict(
+        key=list(data.dataset_metadata.keys()),
+        value=list(data.dataset_metadata.values()),
+    )
+dataset_metadata_source = ColumnDataSource(dataset_metadata)
+
+dataset_metadata_columns = [
+        TableColumn(field="key", title="key"),
+        TableColumn(field="value", title="value"),
+    ]
+metadata_table = DataTable(source=dataset_metadata_source, 
+                                columns=dataset_metadata_columns,
+                                css_classes=["custom_select"])
+
+metadata_layout = row(Spacer(width=30), 
+                    column(Div(text='<font size = "2" color = "darkslategray" ><b>Metadata<b></font>'), 
+                            Spacer(height=10),
+                            metadata_table))
+metadata_layout.visible=False
+
+metadata_button = Button(icon=FontAwesomeIcon(icon_name="info", size=2),
+                                            label="", 
+                                            height=50, 
+                                            width=50) # , width_policy='fixed'
+metadata_button.on_click(show_hide_metadata)
+
+# TODO: should I copy the data and save them in memory for 'safe return to the future' scenario?
+
+
 if data.feature_type == 'TimeSeriesProfile':
     preselected_variable = data[list(data.keys())[0]].columns[0]
     df = data[list(data.keys())[0]] # [preselected_variable].to_frame()
@@ -409,7 +460,7 @@ if data.feature_type == 'TimeSeriesProfile':
     #                       + list(data.keys())[0].split(' ')[1],
     #                  style={'text-align': 'left'})
 
-    slider = Slider(title="Profile # ",
+    slider = Slider(title="",
                         value=0,
                         start=0,
                         end=len(data.keys()) - 1,
@@ -422,11 +473,11 @@ if data.feature_type == 'TimeSeriesProfile':
 
     left_btn.on_click(left_btn_handler)
     right_btn.on_click(right_btn_handler)
-
+    slider_label = Div(text='<font size = "2" color = "darkslategray" ><b>Profile #:<b></font>')
     slider_wrapper = layout([
-            [Spacer(width=100), slider, left_btn, right_btn, par],
+            [Spacer(width=100), column(slider_label, slider), column(Spacer(width=10, height=20), row(left_btn, right_btn, par))],
         ])
-            # [Spacer(width=100), start_label, Spacer(width=150), end_label, Spacer(width=100)],
+
 if data.feature_type == 'TimeSeries':
     df = data
     variables = list(data.columns)
@@ -441,6 +492,7 @@ if data.feature_type == 'TimeSeries':
     x, y = df.index.name, variables[0]
     y_range_flipped = False
     handler = ts_handler
+
 if data.feature_type == 'Profile':
     df = data
     variables = list(data.columns)
@@ -462,7 +514,9 @@ p = figure(toolbar_location="above",
             tools=tools_to_show,
             x_axis_type=x_axis_type,
             x_axis_label=x_axis_label,
-            y_axis_label=y_axis_label)
+            y_axis_label=y_axis_label,
+            output_backend="webgl")
+
 p.toolbar.logo = None
 p.sizing_mode = 'stretch_width'
 
@@ -506,32 +560,34 @@ select = Select(title="Select variable:",
 select.on_change('value', handler)
 
 resampling = Select(title="Frequency:", 
-                    options=['H', 'D', 'W','M', 'Q', 'Y'], 
+                    value='--', 
+                    options=['--','H', 'D', 'W','M', 'Q', 'Y'], 
                     css_classes=['custom_select'])
 resampling.on_change('value', resampler)
 
-download = Button(label="Data Export", 
-                button_type="primary", 
-                height=40, 
-                width=120) # , width_policy='fixed'
+download = Button(icon=FontAwesomeIcon(icon_name="download", size=2), 
+                height=50, 
+                width=50,
+                label='') # , width_policy='fixed'
 download.on_click(show_hide_export)
+download_url = Div(text=""" """) 
+
 
 accessibility = Button(icon=FontAwesomeIcon(icon_name="low-vision", size=2), 
                         height=50,  
                         width=50, 
                         label='')
-accessibility.on_click(show_hide_theme)
+accessibility.on_click(show_hide_accessibility)
 
-download_url = Div(text=""" """, width_policy='fixed') 
 
 theme_select = Select(title='Theme', options=['dark_minimal', 
                                               'light_minimal', 
                                               'night_sky', 
                                               'contrast'], 
                                     value = 'light_minimal',
-                                    css_classes=['custom_select'])
+                                    css_classes=['custom_select'],
+                                    width=120, width_policy='fixed')
 theme_select.on_change('value', switch_theme)
-theme_select.visible = False
 
 increase_fontsize = Button(icon=FontAwesomeIcon(icon_name="plus", size=1), 
                         height=30, 
@@ -547,15 +603,18 @@ decrease_fontsize.on_click(decrease_font)
 fontsize_label = Div(text='<font size = "2" color = "darkslategray" ><b>Fontsize<b></font>')
 fontsize_adjustments = column(fontsize_label, 
                             Spacer(width=10, height=10), 
-                            row(decrease_fontsize, Spacer(width=5, height=30), increase_fontsize))
-fontsize_adjustments.visible = False
+                            row(decrease_fontsize, Spacer(width=5, height=10), increase_fontsize))
+accessibility_layout = row(Spacer(width=30), column(theme_select, Spacer(width=10, height=10), fontsize_adjustments))
+accessibility_layout.visible = False
+
 
 # create the export widget-box
 # format:
 export_format =  Select(title="Select output data format:", 
                         value='csv', 
                         options=['csv', 'NetCDF'], 
-                        css_classes=['custom_select'])
+                        css_classes=['custom_select'],
+                        width=100)
 
 export_variables = CheckboxGroup(labels=variables, 
                                 css_classes=['custom_select'])
@@ -566,36 +625,95 @@ export_button = Button(icon=FontAwesomeIcon(icon_name="download", size=2),
                         label='')
 export_button.on_click(data_download)
 
-export_layout = layout([[row(export_button, 
-                            Spacer(width=60, height=60), 
-                            download_url)], 
-                        [row([export_format, 
-                            Spacer(width=60, height=60), 
-                            column(Div(text='<font size = "2" color = "darkslategray" ><b>Select Variables to export:<b></font>', 
-                                        css_classes=['widget_label'], 
-                                        height=20), 
-                                    export_variables, 
-                            sizing_mode='fixed')])]], 
-                        sizing_mode='fixed')
+export_layout = row(Spacer(width=30), 
+                    column(Div(text='<font size = "3" color = "darkslategray" ><b>Data Export:<b></font>'), 
+                            Spacer(height=10),
+                            Div(text='<font size = "2" color = "darkslategray" ><b>Select Variables to export:<b></font>'),
+                            export_variables,
+                            Spacer(height=10),
+                            Div(text='<font size = "2" color = "darkslategray" ><b>Generate Download link:<b></font>'),
+                            Spacer(height=10),
+                            export_button,
+                            Spacer(height=10),
+                            download_url), sizing_mode='fixed')
 
 export_layout.visible = False
 curdoc_element.title = "TS-Plot"
 
+#tab1 = Panel(child=p, title="Plot")
+#tab2 = Panel(child=metadata_table, title="Metadata")
+#tabs = Tabs(tabs=[tab1, tab2])
+
+'''
+
+show_hide_export_js = CustomJS(args=dict(export_layout=export_layout), code="""
+if (export_layout.visible) {
+    export_layout.visible=false;
+} else {
+    export_layout.visible=true;
+}
+""")
+
+show_hide_accessibility_js = CustomJS(args=dict(accessibility_layout=accessibility_layout), code="""
+if (accessibility_layout.visible) {
+    accessibility_layout.visible=false;
+} else {
+    accessibility_layout.visible=true;
+}
+""")
+
+show_hide_metadata_js = CustomJS(args=dict(metadata_layout=metadata_layout), code="""
+if (metadata_layout.visible) {
+    metadata_layout.visible=false;
+} else {
+    metadata_layout.visible=true;
+}
+""")
+
+show_hide_metadata = CustomAction(icon=os.path.join(os.path.dirname(__file__), 
+                                                    'static', 
+                                                    'icons', 
+                                                    'db.jpg'), 
+                                callback=show_hide_metadata_js,
+                                action_tooltip='Show/Hide Metadata Table')
+p.add_tools(show_hide_metadata)
+
+show_hide_export = CustomAction(icon=os.path.join(os.path.dirname(__file__), 
+                                                    'static', 
+                                                    'icons', 
+                                                    'db.jpg'), 
+                                callback=show_hide_export_js,
+                                action_tooltip='Show/Hide Data Export tools')
+p.add_tools(show_hide_export)
+
+show_hide_accessibility = CustomAction(icon=os.path.join(os.path.dirname(__file__), 
+                                                    'static', 
+                                                    'icons', 
+                                                    'db.jpg'), 
+                                callback=show_hide_accessibility_js,
+                                action_tooltip='Show/Hide Accessibility Options')
+p.add_tools(show_hide_accessibility)
+'''
+
+fake_div = Div(text='', width=100)
+
+fake_div.visible=False
+
 if data.feature_type == 'TimeSeriesProfile':
     curdoc_element.add_root(column(row(select, 
-                                       slider_wrapper,
-                                       Spacer(width=100, height=10, sizing_mode='scale_width'), 
-                                       row(theme_select, fontsize_adjustments, Spacer(width=20, height=30), accessibility)), 
-                                    p, 
-                                    row(download, 
-                                    export_layout),
-                                sizing_mode='scale_width'))
+                                    slider_wrapper,
+                                    Spacer(width=60, height=10, sizing_mode='scale_width'), 
+                                    row(download, metadata_button, accessibility)), 
+                                    Spacer(height=10, sizing_mode='scale_width'), 
+                                row(p, column(fake_div, accessibility_layout, Spacer(width=10, height=10, sizing_mode='fixed'), metadata_layout, export_layout)),
+                            sizing_mode='scale_width'))
 else:
     curdoc_element.add_root(column(row(select, 
-                                        resampling, 
-                                        Spacer(width=100, height=10, sizing_mode='scale_width'), 
-                                        row(theme_select, fontsize_adjustments, Spacer(width=20, height=30), accessibility)), 
-                                    p, 
-                                    row(download,
-                                    export_layout), 
-                                sizing_mode='scale_width'))
+                                    resampling,
+                                    Spacer(width=80, height=10, sizing_mode='scale_width'), 
+                                    row(download, metadata_button, accessibility)), 
+                                    Spacer(height=10, sizing_mode='scale_width'), 
+                                row(p, column(fake_div, accessibility_layout, Spacer(width=10, height=10, sizing_mode='fixed'), metadata_layout, export_layout)),
+                            sizing_mode='scale_width'))
+
+
