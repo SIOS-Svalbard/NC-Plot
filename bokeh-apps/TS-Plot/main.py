@@ -514,8 +514,7 @@ p = figure(toolbar_location="above",
             tools=tools_to_show,
             x_axis_type=x_axis_type,
             x_axis_label=x_axis_label,
-            y_axis_label=y_axis_label,
-            output_backend="webgl")
+            y_axis_label=y_axis_label) # output_backend="webgl"
 
 p.toolbar.logo = None
 p.sizing_mode = 'stretch_width'
