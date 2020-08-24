@@ -163,7 +163,7 @@ def data_download(event):
     if data.feature_type == 'TimeSeriesProfile':
         date_time = get_datetime_string(list(data.keys())[int(slider.value)])
         url_text += f"""<br> <font size = "2" color = "darkslategray" >selected profile: # {slider.value} {date_time}</font>"""
-    url_text += f"""<br><br> <a href="{{str(args.get('url')[0].decode())}}">RAW data</a>"""
+    url_text += f"""<br><br> <a href="{str(args.get('url')[0].decode())}.html" target="_blank">RAW data</a>"""
     download_url.text=url_text
 
 def resampler(attr, old, new):
@@ -396,6 +396,7 @@ def get_labels(obj, variable):
 nc_url = str(args.get('url')[0].decode())
 data = get_data(nc_url)
 
+raw_data = Div(text="""<br><br> <a href="{str(args.get('url')[0].decode())}">RAW data</a>""")
 
 # Create  metadata table
 dataset_metadata_keys = list(data.dataset_metadata.keys())
