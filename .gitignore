@@ -1,6 +1,6 @@
 # General settings app specific
 
-TS-Plot/static/Download/
+bokeh-apps/TS-Plot/static/Download/
 
 package-lock.json
 
