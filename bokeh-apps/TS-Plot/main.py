@@ -16,7 +16,7 @@ from bokeh.models import ColumnDataSource
 from bokeh.models import Select, Button, Div, Slider, CustomJS
 from bokeh.models.tools import HoverTool, CrosshairTool, CustomAction
 from bokeh.plotting import figure, curdoc
-from bokeh.models.widgets import CheckboxGroup, DataTable, TableColumn, Panel, Tabs
+from bokeh.models.widgets import CheckboxGroup, RadioGroup, DataTable, TableColumn, Panel, Tabs
 from bokeh.themes import Theme, built_in_themes
 #
 from itsdangerous import TimestampSigner
@@ -70,8 +70,8 @@ def get_data(resource_url):
             tsp.feature_type = 'TimeSeriesProfile'
             return tsp
         else:
-            data.dataset_metada = ''
-            data.dataset_metada = dataset_metadata
+            data.dataset_metadata = ''
+            data.dataset_metadata = dataset_metadata
             data.variable_metadata = ''
             data.variable_metadata = variable_metadata
             data.feature_type = ''
@@ -120,27 +120,32 @@ def data_download(event):
     # dirpath = os.path.join(os.path.dirname(__file__),'static', download)
     dirpath = os.environ['TSPLOT_DOWNLOAD']
     outfile = Path(dirpath, str(download_token))
-    if data.feature_type == 'TimeSeriesProfile':
+    if data.feature_type in ['TimeSeriesProfile', 'Profile']:
         index_range = np.array([p.y_range.end, p.y_range.start]).tolist()
     else:
         index_range = np.array([p.x_range.start, p.x_range.end], dtype='i8').view('datetime64[ms]').tolist()
+
     start = df.index.searchsorted(index_range[0])
     end = df.index.searchsorted(index_range[1])
     # TODO: check for the output format [netcdf / csv]
+    if export_resampling.active and resampling.value != '--':
+        df_export = df[[variables[x] for x in export_variables.active]][df.index[start]:df.index[end-1]].resample(resampling.value).mean().interpolate(method='linear')
+    else:
+        df_export = df[[variables[x] for x in export_variables.active]][df.index[start]:df.index[end-1]]
     if export_format.value=='csv':
+        outfile = Path(dirpath, str(download_token)).with_suffix('.zip')
         compression_opts = dict(method='zip', archive_name=f'{select.value}.csv')
         #df[select.value][df.index[start]:df.index[end-1]].to_csv(outfile, header=True)
         #
         ### df[select.value][df.index[start]:df.index[end-1]].to_csv(outfile, compression=compression_opts, header=True)
-        df[[variables[x] for x in export_variables.active]][df.index[start]:df.index[end-1]].to_csv(outfile, 
-                                                                                                    compression=compression_opts, 
-                                                                                                    header=True)
+        df_export.to_csv(outfile, compression=compression_opts, header=True)
         # zip_resource = zipfile.ZipFile(outfile, 'a')
         # shall we add a figure?
         # zip.write('metadata.html', os.path.basename('metadata.html'))
         # zip_resource.close()
     else: 
-        xr = xarray.Dataset.from_dataframe(df[[variables[x] for x in export_variables.active]][df.index[start]:df.index[end-1]]) 
+        outfile = Path(dirpath, str(download_token)).with_suffix('.nc')
+        xr = xarray.Dataset.from_dataframe(df_export) 
         # TODO: add attributes and metadata, probably worth to do some reindexing
         xr.to_netcdf(outfile)                                                                                          
     #
@@ -152,10 +157,13 @@ def data_download(event):
         server_domain = 'localhost:5100'
         prefix = 'test'
     url_text = ''
-    url_text=f'<a href="http://{server_domain}/{prefix}/TS-Plot/static/Download/{download_token}">Direct download <br> <br> </a> <font size = "2" color = "darkslategray" >selected index: [{df.index[start]}, {df.index[end-1]}]</font>'
+    url_text=f'<a href="http://{server_domain}/{prefix}/TS-Plot/static/Download/{outfile.name}">Selected data </a> <font size = "2" color = "darkslategray" > <br> <br> <b>selected index:</b> <br> [{df.index[start]}, {df.index[end-1]}] <br> <br> <b>selected variables:</b> <br> {[variables[x] for x in export_variables.active]}</font>'
+    if data.feature_type == 'TimeSeries':
+        url_text += f"""<br> <font size = "2" color = "darkslategray" ><b>Frequency:</b> <br>{resampling.value} </font>"""
     if data.feature_type == 'TimeSeriesProfile':
         date_time = get_datetime_string(list(data.keys())[int(slider.value)])
-        url_text += f' <br> <font size = "2" color = "darkslategray" >selected profile: # {slider.value} {date_time}</font> '  
+        url_text += f"""<br> <font size = "2" color = "darkslategray" >selected profile: # {slider.value} {date_time}</font>"""
+    url_text += f"""<br><br> <a href="{{str(args.get('url')[0].decode())}}">RAW data</a>"""
     download_url.text=url_text
 
 def resampler(attr, old, new):
@@ -624,12 +632,20 @@ export_button = Button(icon=FontAwesomeIcon(icon_name="download", size=2),
                         label='')
 export_button.on_click(data_download)
 
+export_resampling = RadioGroup(labels=["Raw", "Resampled"], active=0)
+export_resampling_layout = column(Div(text='<font size = "2" color = "darkslategray" ><b>Frequency:<b></font>'), 
+                                    export_resampling,
+                                    Spacer(height=10))
+
 export_layout = row(Spacer(width=30), 
                     column(Div(text='<font size = "3" color = "darkslategray" ><b>Data Export:<b></font>'), 
                             Spacer(height=10),
                             Div(text='<font size = "2" color = "darkslategray" ><b>Select Variables to export:<b></font>'),
                             export_variables,
                             Spacer(height=10),
+                            export_format,
+                            Spacer(height=10),
+                            export_resampling_layout,
                             Div(text='<font size = "2" color = "darkslategray" ><b>Generate Download link:<b></font>'),
                             Spacer(height=10),
                             export_button,
@@ -699,6 +715,7 @@ fake_div = Div(text='', width=100)
 fake_div.visible=False
 
 if data.feature_type == 'TimeSeriesProfile':
+    export_resampling_layout.visible = False
     curdoc_element.add_root(column(row(select, 
                                     slider_wrapper,
                                     Spacer(width=60, height=10, sizing_mode='scale_width'), 
@@ -707,6 +724,9 @@ if data.feature_type == 'TimeSeriesProfile':
                                 row(p, column(fake_div, accessibility_layout, Spacer(width=10, height=10, sizing_mode='fixed'), metadata_layout, export_layout)),
                             sizing_mode='scale_width'))
 else:
+    if data.feature_type == 'Profile':
+        resampling.visible = False
+        export_resampling_layout.visible = False
     curdoc_element.add_root(column(row(select, 
                                     resampling,
                                     Spacer(width=80, height=10, sizing_mode='scale_width'), 
